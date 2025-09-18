@@ -1,0 +1,102 @@
+"use client";
+import { useState } from "react";
+
+export default function ResumeChat() {
+  const [messages, setMessages] = useState<{ role: string; content: string }[]>(
+    []
+  );
+  const [input, setInput] = useState("");
+  let socket: WebSocket | null = null;
+
+  const sendMessage = () => {
+    if (!input.trim()) return;
+
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
+      socket = new WebSocket("ws://localhost:8000/ws/chat/");
+      socket.onmessage = (event) => {
+        const data = JSON.parse(event.data);
+        if (data.delta) {
+          setMessages((prev) => {
+            const last = prev[prev.length - 1];
+            if (last && last.role === "bot") {
+              return [
+                ...prev.slice(0, -1),
+                { role: "bot", content: last.content + data.delta },
+              ];
+            }
+            return [...prev, { role: "bot", content: data.delta }];
+          });
+        }
+        if (data.done) console.log("Stream finished");
+        if (data.sources) console.log("Sources:", data.sources);
+      };
+      socket.onopen = () => {
+        socket!.send(JSON.stringify({ query: input }));
+      };
+    } else {
+      socket.send(JSON.stringify({ query: input }));
+    }
+
+    setMessages((prev) => [
+      ...prev,
+      { role: "user", content: input },
+      { role: "bot", content: "" },
+    ]);
+    setInput("");
+  };
+
+  return (
+    <div className="flex flex-col h-screen bg-gray-100">
+      <div className="flex-1 overflow-y-auto p-4 space-y-4">
+        {messages.map((m, i) => (
+          <div
+            key={i}
+            className={`flex ${
+              m.role === "user" ? "justify-end" : "justify-start"
+            }`}
+          >
+            <div
+              className={`max-w-xs md:max-w-md p-3 rounded-lg shadow-md ${
+                m.role === "user"
+                  ? "bg-blue-500 text-white"
+                  : "bg-gray-200 text-gray-800"
+              }`}
+            >
+              {m.content}
+            </div>
+          </div>
+        ))}
+      </div>
+      <div className="bg-white p-4 border-t border-gray-200 shadow-lg">
+        <div className="flex gap-2 max-w-lg mx-auto">
+          <input
+            className="flex-1 p-3 border border-gray-300 rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && sendMessage()}
+            placeholder="Type your message..."
+          />
+          <button
+            onClick={sendMessage}
+            className="bg-blue-500 text-white p-3 rounded-full transition-colors duration-200 hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            <svg
+              xmlns="http://www.w3.org/2000/svg"
+              className="h-6 w-6"
+              fill="none"
+              viewBox="0 0 24 24"
+              stroke="currentColor"
+            >
+              <path
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                strokeWidth={2}
+                d="M14 5l7 7m0 0l-7 7m7-7H3"
+              />
+            </svg>
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
